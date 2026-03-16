@@ -1,0 +1,15 @@
+services:
+  claude:
+    build: .
+    stdin_open: true  # -i
+    tty: true         # -t
+    volumes:
+      - .:/workspace
+      - claude-config:/claude-config
+    environment:
+      - GH_TOKEN
+      - COLORTERM=truecolor
+      - CLAUDE_CONFIG_DIR=/claude-config
+
+volumes:
+  claude-config:

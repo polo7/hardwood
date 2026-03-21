@@ -82,10 +82,6 @@ class ParquetComparisonTest {
             "case-131.parquet", // NullPointer on Schema field
             "case-137.parquet", // Unsupported shredded value type
             "case-138.parquet", // NullPointer on Schema field
-
-            // shredded_variant files with Hardwood issues
-            "case-046.parquet", // EOF while reading BYTE_ARRAY
-
             // Intentionally corrupted CRC checksums (rejected by Hardwood CRC validation)
             "datapage_v1-corrupt-checksum.parquet",
             "rle-dict-uncompressed-corrupt-checksum.parquet",

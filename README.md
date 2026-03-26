@@ -1174,7 +1174,7 @@ curl -X PUT --data-binary @performance-testing/test-data-setup/target/tlc-trip-r
 3. Run hardwood CLI
 
 ```bash
-cli/target/hardwood-cli-early-access-osx-aarch64/bin/hardwood info -f s3://test-bucket/yellow_tripdata_2025-01.parquet
+cli/target/hardwood-cli-early-access-macos-aarch64/bin/hardwood info -f s3://test-bucket/yellow_tripdata_2025-01.parquet
 ```
 
 ### Running Claude Code

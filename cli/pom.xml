@@ -350,7 +350,7 @@
         <os><family>mac</family></os>
       </activation>
       <properties>
-        <dist.os>osx</dist.os>
+        <dist.os>macos</dist.os>
         <dist.format>tar.gz</dist.format>
         <zstd.os.dir>darwin</zstd.os.dir>
         <snappy.os.dir>Mac</snappy.os.dir>

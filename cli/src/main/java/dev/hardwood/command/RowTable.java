@@ -201,8 +201,12 @@ class RowTable {
         return null;
     }
 
-    static void print(CommandSpec spec, String[] headers, List<String[]> rows) {
+    static String renderTable(String[] headers, List<String[]> rows) {
         Object[][] data = rows.toArray(new String[0][]);
-         spec.commandLine().getOut().println(AsciiTable.getTable(headers, data));
+        return AsciiTable.getTable(AsciiTable.BASIC_ASCII_NO_DATA_SEPARATORS, headers, null, data);
+    }
+
+    static void print(CommandSpec spec, String[] headers, List<String[]> rows) {
+        spec.commandLine().getOut().println(renderTable(headers, rows));
     }
 }

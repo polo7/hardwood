@@ -81,21 +81,21 @@ public class InspectColumnSizeCommand implements Callable<Integer> {
     }
 
     private void printRanked(List<ColumnSize> sizes) {
-        spec.commandLine().getOut().printf("%-4s  %-30s  %-12s  %-14s  %-14s  %-6s%n",
-                "Rank", "Column", "Type", "Compressed", "Uncompressed", "Ratio");
-        spec.commandLine().getOut().println("-".repeat(88));
-
+        String[] headers = {"Rank", "Column", "Type", "Compressed", "Uncompressed", "Ratio"};
+        List<String[]> rows = new ArrayList<>();
         for (int i = 0; i < sizes.size(); i++) {
             ColumnSize s = sizes.get(i);
             double ratio = s.uncompressed() > 0 ? (100.0 * s.compressed() / s.uncompressed()) : 100.0;
-            spec.commandLine().getOut().printf("%-4d  %-30s  %-12s  %-14s  %-14s  %.1f%%%n",
-                    i + 1,
+            rows.add(new String[]{
+                    String.valueOf(i + 1),
                     s.path(),
                     s.type(),
                     Sizes.format(s.compressed()),
                     Sizes.format(s.uncompressed()),
-                    ratio);
+                    String.format("%.1f%%", ratio)
+            });
         }
+        spec.commandLine().getOut().println(RowTable.renderTable(headers, rows));
     }
 
     private record ColumnSize(String path, String type, String codec, long compressed, long uncompressed) {

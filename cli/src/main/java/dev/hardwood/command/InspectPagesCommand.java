@@ -9,6 +9,7 @@ package dev.hardwood.command;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -42,13 +43,14 @@ public class InspectPagesCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (fileMixin.toInputFile() == null) {
+        InputFile inputFile = fileMixin.toInputFile();
+        if (inputFile == null) {
             return CommandLine.ExitCode.SOFTWARE;
         }
 
         FileMetaData metadata;
         FileSchema schema;
-        try (ParquetFileReader reader = ParquetFileReader.open(fileMixin.toInputFile())) {
+        try (ParquetFileReader reader = ParquetFileReader.open(inputFile)) {
             metadata = reader.getFileMetaData();
             schema = reader.getFileSchema();
         }
@@ -67,10 +69,10 @@ public class InspectPagesCommand implements Callable<Integer> {
             }
         }
 
-        InputFile inputFile = fileMixin.toInputFile();
+        InputFile pageInputFile = fileMixin.toInputFile();
         try {
-            inputFile.open();
-            printPages(metadata, schema, inputFile);
+            pageInputFile.open();
+            printPages(metadata, schema, pageInputFile);
         }
         catch (IOException e) {
             spec.commandLine().getErr().println("Error reading pages: " + e.getMessage());
@@ -78,7 +80,7 @@ public class InspectPagesCommand implements Callable<Integer> {
         }
         finally {
             try {
-                inputFile.close();
+                pageInputFile.close();
             }
             catch (IOException e) {
                 spec.commandLine().getErr().println("Error closing file: " + e.getMessage());
@@ -92,6 +94,7 @@ public class InspectPagesCommand implements Callable<Integer> {
         List<RowGroup> rowGroups = metadata.rowGroups();
         List<ColumnSchema> columns = schema.getColumns();
 
+        String[] headers = {"Page", "Type", "Encoding", "Compressed", "Values"};
         for (int rgIdx = 0; rgIdx < rowGroups.size(); rgIdx++) {
             RowGroup rg = rowGroups.get(rgIdx);
             for (ColumnSchema col : columns) {
@@ -100,19 +103,20 @@ public class InspectPagesCommand implements Callable<Integer> {
                 }
                 ColumnChunk chunk = rg.columns().get(col.columnIndex());
                 spec.commandLine().getOut().printf("Row Group %d / %s%n", rgIdx, Sizes.columnPath(chunk.metaData()));
-                scanPageHeaders(chunk.metaData(), inputFile);
-                spec.commandLine().getOut().println();
+                List<String[]> rows = collectPageHeaders(chunk.metaData(), inputFile);
+                spec.commandLine().getOut().println(RowTable.renderTable(headers, rows));
             }
         }
     }
 
-    private void scanPageHeaders(ColumnMetaData cmd, InputFile inputFile) throws IOException {
+    private List<String[]> collectPageHeaders(ColumnMetaData cmd, InputFile inputFile) throws IOException {
         Long dictOffset = cmd.dictionaryPageOffset();
         long chunkStart = (dictOffset != null && dictOffset > 0) ? dictOffset : cmd.dataPageOffset();
         long chunkSize = cmd.totalCompressedSize();
 
         ByteBuffer buffer = inputFile.readRange(chunkStart, (int) chunkSize);
 
+        List<String[]> rows = new ArrayList<>();
         int pageIndex = 0;
         long valuesRead = 0;
         int position = 0;
@@ -122,7 +126,14 @@ public class InspectPagesCommand implements Callable<Integer> {
             PageHeader header = PageHeaderReader.read(headerReader);
             int headerSize = headerReader.getBytesRead();
 
-            printPageHeader(pageIndex, header);
+            String label = header.type() == PageHeader.PageType.DICTIONARY_PAGE ? "dict" : String.valueOf(pageIndex);
+            rows.add(new String[]{
+                    label,
+                    header.type().toString(),
+                    pageEncoding(header),
+                    Sizes.format(header.compressedPageSize()),
+                    String.valueOf(numValues(header))
+            });
 
             if (header.type() == PageHeader.PageType.DATA_PAGE || header.type() == PageHeader.PageType.DATA_PAGE_V2) {
                 valuesRead += numValues(header);
@@ -134,18 +145,8 @@ public class InspectPagesCommand implements Callable<Integer> {
 
             position += headerSize + header.compressedPageSize();
         }
-    }
 
-    private void printPageHeader(int index, PageHeader header) {
-        String label = header.type() == PageHeader.PageType.DICTIONARY_PAGE ? " dict" : String.format("[%3d]", index);
-        String encoding = pageEncoding(header);
-        int numValues = numValues(header);
-        spec.commandLine().getOut().printf("  %s  %-18s  encoding: %-22s  compressed: %-10s  values: %d%n",
-                label,
-                header.type(),
-                encoding,
-                Sizes.format(header.compressedPageSize()),
-                numValues);
+        return rows;
     }
 
     private static String pageEncoding(PageHeader header) {

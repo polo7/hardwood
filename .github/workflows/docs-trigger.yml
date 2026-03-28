@@ -2,21 +2,31 @@ name: Trigger documentation publish
 
 on:
   push:
-    branches: [main]
-    paths: ['docs/**']
     tags: ['v*']
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+    branches: [main]
 
 jobs:
   dispatch:
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push'
+      || github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Fire repository_dispatch to site repo
         env:
           GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
         run: |
-          REF="${{ github.ref_name }}"
-          SHA="${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            REF="${{ github.ref_name }}"
+            SHA="${{ github.sha }}"
+          else
+            REF="${{ github.event.workflow_run.head_branch }}"
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          fi
           if [[ "$REF" == v* ]]; then
             VERSION_LABEL="${REF#v}"
           else

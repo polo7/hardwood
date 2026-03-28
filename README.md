@@ -362,7 +362,7 @@ while (rowReader.hasNext()) {
 
 ### Predicate Pushdown (Filter)
 
-Filter predicates allow Hardwood to skip entire row groups whose statistics prove that no rows can match the predicate, avoiding unnecessary I/O and decoding.
+Filter predicates enable two levels of predicate pushdown. At the row-group level, entire row groups whose statistics prove no rows can match are skipped. Within surviving row groups, the Column Index (per-page min/max statistics) is used to skip individual pages, avoiding unnecessary decompression and decoding. On remote backends like S3, only the matching pages are fetched, reducing network I/O.
 
 ```java
 import dev.hardwood.reader.FilterPredicate;
@@ -836,12 +836,13 @@ Or attach dynamically via `jcmd <pid> JFR.start`.
 | `dev.hardwood.RowGroupScanned` | Decode | Page boundaries scanned in a column chunk. Fields: file, rowGroupIndex, column, pageCount, scanStrategy (`sequential` or `offset-index`) |
 | `dev.hardwood.PageDecoded` | Decode | Single data page decoded. Fields: column, compressedSize, uncompressedSize |
 | `dev.hardwood.RowGroupFilter` | Filter | Row groups filtered by predicate pushdown. Fields: file, totalRowGroups, rowGroupsKept, rowGroupsSkipped |
+| `dev.hardwood.PageFilter` | Filter | Pages filtered by Column Index predicate pushdown. Fields: file, rowGroupIndex, column, totalPages, pagesKept, pagesSkipped |
 | `dev.hardwood.BatchWait` | Pipeline | Consumer blocked waiting for the assembly pipeline. Fields: column |
 | `dev.hardwood.PrefetchMiss` | Pipeline | Prefetch queue miss requiring synchronous decode. Fields: file, column, newDepth, queueEmpty |
 
 Events appear under the **Hardwood** category in JDK Mission Control (JMC) or any JFR analysis tool. Use them to identify:
 - **I/O bottlenecks** — large `FileMapping` durations or frequent `PrefetchMiss` events
-- **Filter effectiveness** — `RowGroupFilter` shows how many row groups were skipped
+- **Filter effectiveness** — `RowGroupFilter` shows how many row groups were skipped; `PageFilter` shows how many pages were skipped within surviving row groups
 - **Decode hotspots** — `PageDecoded` events with large uncompressed sizes or high frequency
 - **Pipeline stalls** — `BatchWait` events indicate the reader is waiting for decoded data
 

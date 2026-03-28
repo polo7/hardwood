@@ -8,8 +8,10 @@
 package dev.hardwood.s3;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -19,6 +21,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.adobe.testing.s3mock.testcontainers.S3MockContainer;
 
+import dev.hardwood.InputFile;
+import dev.hardwood.reader.ColumnReader;
+import dev.hardwood.reader.FilterPredicate;
 import dev.hardwood.reader.ParquetFileReader;
 import dev.hardwood.reader.RowReader;
 
@@ -49,6 +54,8 @@ class S3InputFileTest {
                 TEST_RESOURCES.resolve("plain_uncompressed.parquet")));
         source.api().putObject("test-bucket", "plain_uncompressed_with_nulls.parquet", Files.readAllBytes(
                 TEST_RESOURCES.resolve("plain_uncompressed_with_nulls.parquet")));
+        source.api().putObject("test-bucket", "column_index_pushdown.parquet", Files.readAllBytes(
+                TEST_RESOURCES.resolve("column_index_pushdown.parquet")));
     }
 
     @AfterAll
@@ -125,6 +132,81 @@ class S3InputFileTest {
                 ParquetFileReader.open(
                         source.inputFile("test-bucket", "nonexistent.parquet")))
                 .isInstanceOf(IOException.class);
+    }
+
+    @Test
+    void columnIndexPageFilteringReducesNetworkIo() throws Exception {
+        // column_index_pushdown.parquet: 10000 rows, sorted id [0,9999], ~10 pages of 1024 values
+        // Filter to id < 1000 should skip ~90% of pages via Column Index,
+        // and page-range I/O should fetch only matching pages from S3
+        FilterPredicate filter = FilterPredicate.lt("id", 1000L);
+
+        ByteCountingInputFile unfilteredFile = new ByteCountingInputFile(
+                source.inputFile("test-bucket", "column_index_pushdown.parquet"));
+        long unfilteredCount = 0;
+        try (ParquetFileReader reader = ParquetFileReader.open(unfilteredFile);
+             ColumnReader col = reader.createColumnReader("id")) {
+            while (col.nextBatch()) {
+                unfilteredCount += col.getRecordCount();
+            }
+        }
+
+        ByteCountingInputFile filteredFile = new ByteCountingInputFile(
+                source.inputFile("test-bucket", "column_index_pushdown.parquet"));
+        long filteredCount = 0;
+        try (ParquetFileReader reader = ParquetFileReader.open(filteredFile);
+             ColumnReader col = reader.createColumnReader("id", filter)) {
+            while (col.nextBatch()) {
+                filteredCount += col.getRecordCount();
+            }
+        }
+
+        assertThat(unfilteredCount).isEqualTo(10000);
+        assertThat(filteredCount).isLessThan(unfilteredCount);
+        assertThat(filteredFile.bytesRead())
+                .as("Filtered S3 read should transfer fewer bytes than unfiltered")
+                .isLessThan(unfilteredFile.bytesRead());
+    }
+
+    /// InputFile wrapper that tracks total bytes fetched via readRange.
+    private static class ByteCountingInputFile implements InputFile {
+
+        private final InputFile delegate;
+        private final AtomicLong totalBytesRead = new AtomicLong();
+
+        ByteCountingInputFile(InputFile delegate) {
+            this.delegate = delegate;
+        }
+
+        long bytesRead() {
+            return totalBytesRead.get();
+        }
+
+        @Override
+        public void open() throws IOException {
+            delegate.open();
+        }
+
+        @Override
+        public ByteBuffer readRange(long offset, int length) throws IOException {
+            totalBytesRead.addAndGet(length);
+            return delegate.readRange(offset, length);
+        }
+
+        @Override
+        public long length() throws IOException {
+            return delegate.length();
+        }
+
+        @Override
+        public String name() {
+            return delegate.name();
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
     }
 
     @Test

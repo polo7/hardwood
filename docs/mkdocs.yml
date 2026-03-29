@@ -29,6 +29,7 @@ nav:
 
 theme:
   name: material
+  custom_dir: overrides
   palette:
     - scheme: default
       toggle:
@@ -46,6 +47,9 @@ theme:
     - search.highlight
     - content.code.copy
     - content.action.edit
+
+hooks:
+  - hooks/git_commit.py
 
 plugins:
   - search
@@ -73,6 +77,7 @@ extra_css:
   - stylesheets/extra.css
 
 extra:
+  generator: false
   version:
     provider: mike
     alias: true

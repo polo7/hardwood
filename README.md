@@ -136,10 +136,10 @@ The documentation site can be previewed locally using Docker:
 docker build -t hardwood-docs docs/
 
 # Serve locally with hot reload — preview at http://127.0.0.1:8000
-docker run --rm -p 8000:8000 -v "$(pwd)/docs:/docs" hardwood-docs
+docker run --rm -p 8000:8000 -v "$(pwd):/repo" hardwood-docs
 
 # Build static site (output in docs/site/)
-docker run --rm -v "$(pwd)/docs:/docs" hardwood-docs build
+docker run --rm -v "$(pwd):/repo" hardwood-docs build -f docs/mkdocs.yml
 ```
 
 ### Running Claude Code

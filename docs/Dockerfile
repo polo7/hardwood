@@ -7,8 +7,9 @@
 #
 
 FROM python:3-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-WORKDIR /docs
+WORKDIR /repo
 ENTRYPOINT ["mkdocs"]
-CMD ["serve", "--dev-addr=0.0.0.0:8000"]
+CMD ["serve", "--dev-addr=0.0.0.0:8000", "-f", "docs/mkdocs.yml"]

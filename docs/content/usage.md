@@ -249,6 +249,11 @@ Filters work with all reader types: `RowReader`, `ColumnReader`, `AvroRowReader`
 
 ### Limitations
 
+- **Record-level filtering only applies to flat schemas
+  ([#207](https://github.com/hardwood-hq/hardwood/issues/207)).** When the schema contains
+  nested columns (structs, lists, or maps), record-level filtering is not active. Row-group
+  and page-level statistics pushdown still apply, but non-matching rows within surviving pages
+  will not be filtered out. A warning is logged when this occurs.
 - **Bloom filter pushdown is not supported
   ([#180](https://github.com/hardwood-hq/hardwood/issues/180)).** Parquet files may contain
   Bloom filters for high-cardinality columns, but Hardwood does not currently use them for

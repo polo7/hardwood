@@ -33,6 +33,8 @@ import dev.hardwood.schema.ProjectedSchema;
 /// Subclasses must implement [#initialize()], [#loadNextBatch()], and [#close()].
 abstract class AbstractRowReader implements RowReader {
 
+    private static final System.Logger LOG = System.getLogger(AbstractRowReader.class.getName());
+
     protected BatchDataView dataView;
     protected ResolvedPredicate filterPredicate;
     protected ProjectedSchema projectedSchemaRef;
@@ -56,6 +58,7 @@ abstract class AbstractRowReader implements RowReader {
 
     // Whether record-level filtering is active (computed once per batch in cacheFlatBatch)
     private boolean recordFilterActive;
+    private boolean recordFilterWarningEmitted;
 
     /// Computes a batch size that keeps all column arrays for one batch within the L2 cache.
     ///
@@ -139,6 +142,12 @@ abstract class AbstractRowReader implements RowReader {
         }
 
         recordFilterActive = filterPredicate != null && flatFastPath && nameCache != null;
+        if (filterPredicate != null && !recordFilterActive && !recordFilterWarningEmitted) {
+            recordFilterWarningEmitted = true;
+            LOG.log(System.Logger.Level.WARNING,
+                    "Record-level filtering is not active because the schema contains nested columns (structs, lists, or maps). " +
+                    "Row-group and page-level filtering still apply, but non-matching rows within surviving pages will not be filtered out.");
+        }
     }
 
     private static Object extractValueArray(FlatColumnData flatColumnData) {

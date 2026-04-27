@@ -16,6 +16,9 @@ RUN microdnf install -y --nodocs \
       zip \
       unzip \
       tar \
+      diffutils \
+      binutils \
+      vim-common \
       python3 \
       python3-pip \
     && microdnf clean all

@@ -12,7 +12,27 @@ from datetime import datetime, date, time, timezone
 from decimal import Decimal
 import uuid
 
+import shutil
+from pathlib import Path
+
 from parquet_annotators import annotate_column_as_bson, annotate_group_as_variant, annotate_column_as_interval
+
+
+def _copy_if_exists(src: Path, dst: str, prereq_hint: str) -> bool:
+    """Copy `src` to `dst` if `src` exists; otherwise print a warning and return False.
+
+    Use this for fixtures sourced from another module's build output: the source
+    file is only present after that module has been built, so a fresh checkout
+    won't have it. Skipping (rather than failing) keeps the rest of the data
+    generation usable in that case.
+    """
+    if not src.exists():
+        print(f"\nSkipping {dst}:")
+        print(f"  Source not found: {src}")
+        print(f"  Hint: {prereq_hint}")
+        return False
+    shutil.copyfile(src, dst)
+    return True
 
 # Plain encoding with no compression (for Milestone 1)
 # Create a simple table with NO nulls first, explicitly marking fields as non-nullable
@@ -2188,3 +2208,62 @@ annotate_column_as_interval(
 
 print("\nGenerated interval_legacy_converted_type_test.parquet:")
 print("  - Same data, only the legacy converted_type=INTERVAL annotation set")
+
+# old_list_structure_test.parquet
+# Tests reading the pre-standard 2-level LIST encoding (see hardwood-hq/hardwood#282).
+# PyArrow only writes the standard 3-level encoding, so this fixture cannot be
+# generated synthetically — it is copied from the upstream apache/parquet-testing
+# corpus, which the parquet-testing-runner module clones into its target/ at build
+# time. Build that module first (e.g. `./mvnw -pl parquet-testing-runner package`).
+_copy_if_exists(
+    Path('parquet-testing-runner/target/parquet-testing/data/old_list_structure.parquet'),
+    'core/src/test/resources/old_list_structure_test.parquet',
+    "build the parquet-testing-runner module to populate target/parquet-testing/")
+
+# filter_all_pages_match.parquet
+# Regression for hardwood-hq/hardwood#254: when a filter matches all pages in a row
+# group (the Column Index reports every page overlaps the predicate), the reader
+# must still return all rows. Requires a Column Index so the filter resolves to
+# a concrete page-spanning RowRanges rather than RowRanges.ALL.
+filter_all_pages_table = pa.table({
+    'id': pa.array(list(range(100)), type=pa.int64()),
+    'value': pa.array([i * 1.5 for i in range(100)], type=pa.float64()),
+})
+pq.write_table(
+    filter_all_pages_table,
+    'core/src/test/resources/filter_all_pages_match.parquet',
+    write_page_index=True,
+)
+
+print("\nGenerated filter_all_pages_match.parquet:")
+print("  - Schema: id INT64, value DOUBLE; 100 rows in one row group")
+print("  - Column Index enabled")
+
+# yellow_tripdata_sample.parquet
+# Five-row slice of the real NYC TLC Yellow Taxi 2025-01 release. The sample is
+# *not* synthetic: YellowTripDataTest asserts the exact published values
+# (VendorID, pickup/dropoff timestamps, fares, ...). The full month is
+# downloaded by the performance-testing/test-data-setup module's TaxiDataDownloader
+# (run via Maven on that module first); we just copy out the first 5 rows so the
+# core test suite has a small fixture without a network dependency.
+yellow_source = Path('performance-testing/test-data-setup/target/tlc-trip-record-data/yellow_tripdata_2025-01.parquet')
+yellow_destinations = [
+    'core/src/test/resources/yellow_tripdata_sample.parquet',
+    'integration-test/src/test/resources/yellow_tripdata_sample.parquet',
+]
+if yellow_source.exists():
+    yellow_full = pq.read_table(yellow_source)
+    yellow_sample = yellow_full.slice(0, 5)
+    primary, *mirrors = yellow_destinations
+    pq.write_table(yellow_sample, primary)
+    for mirror in mirrors:
+        shutil.copyfile(primary, mirror)
+    print("\nGenerated yellow_tripdata_sample.parquet:")
+    print(f"  - First 5 rows of {yellow_source.name}")
+    print(f"  - Schema: {yellow_full.num_columns} columns from the upstream TLC release")
+    print(f"  - Written to: {', '.join(yellow_destinations)}")
+else:
+    print("\nSkipping yellow_tripdata_sample.parquet:")
+    print(f"  Source not found: {yellow_source}")
+    print("  Hint: build performance-testing/test-data-setup so TaxiDataDownloader")
+    print("        populates target/tlc-trip-record-data/yellow_tripdata_2025-01.parquet")

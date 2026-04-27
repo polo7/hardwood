@@ -54,6 +54,7 @@ Key rules for `///` Markdown JavaDoc:
 
 To generate test Parquet files, extend tools/simple-datagen.py and run: `source .docker-venv/bin/activate && python tools/simple-datagen.py`
 When running Python, use _.docker-venv_ as the venv directory.
+Use Python 3.10–3.14 (PyArrow 24.0.0, pinned in `requirements.txt`, supports that range). The pinned versions of `pyarrow` and `thriftpy2` are load-bearing: both directly produce bytes that get checked into `core/src/test/resources/`, so any upgrade must be paired with regenerating the affected fixtures.
 
 # Contributions
 
